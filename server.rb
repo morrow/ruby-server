@@ -1,7 +1,7 @@
 require 'socket' # Provides TCPServer and TCPSocket classes
 
 # Initialize a TCPServer object that will listen
-# on localhost:2345 for incoming connections.
+# for incoming connections.
 server = TCPServer.new('localhost', 8093)
 
 # loop infinitely, processing one incoming
@@ -19,23 +19,28 @@ loop do
   # Log the request to the console for debugging
   STDERR.puts request
 
-  response = "Hello World!\n"
+  response_body = "Hello Vanessa!\n"
 
   # We need to include the Content-Type and Content-Length headers
   # to let the client know the size and type of data
   # contained in the response. Note that HTTP is whitespace
   # sensitive, and expects each header line to end with CRLF (i.e. "\r\n")
-  socket.print "HTTP/1.1 200 OK\r\n" +
-               "Content-Type: text/plain\r\n" +
-               "Content-Length: #{response.bytesize}\r\n" +
-               "Connection: close\r\n"
+  protocol = "HTTP/1.1"
+  status = "200 OK"
+  end_of_line = "\r\n"
+  content_type = "text/plain"
+  content_length = response_body.bytesize
+
+  response_headers =  ["#{protocol} #{status}", "Content-Type: #{content_type}", "Content-Length: #{content_length}", "Connection: close", ""].join(end_of_line)
+
+  puts response_headers
 
   # Print a blank line to separate the header from the response body,
   # as required by the protocol.
-  socket.print "\r\n"
-
-  # Print the actual response body, which is just "Hello World!\n"
+  response = response_headers + "\r\n" + response_body
+  puts response
   socket.print response
+
 
   # Close the socket, terminating the connection
   socket.close
