@@ -1,47 +1,118 @@
-require 'socket' # Provides TCPServer and TCPSocket classes
+require 'socket'
+require 'json'
 
-# Initialize a TCPServer object that will listen
-# for incoming connections.
 server = TCPServer.new('localhost', 8093)
 
-# loop infinitely, processing one incoming
-# connection at a time.
-loop do
+def handle(request)
+  # parse query string
+  if request[:url].match(/\?/)
+    request[:query] = {}
+    query_string = request[:url].split('?')[1]
+    request[:path] = request[:url].split('?')[0]
+    # key-value query string
+    if query_string and query_string.match(/\=/)
+      if query_string.match(/\&/)
+        query_string.split('&').each do |key_value|
+          key = key_value.split('=')[0]
+          value = key_value.split('=')[1]
+          request[:query][key] = value
+        end
+      else
+        request[:query][query_string.split('=')[0]] = query_string.split('=')[1]
+      end
+    # query only string
+    elsif query_string
+      request[:query] = {query_string => ""}
+    end
+  end
+  # file extension
+  request[:file_extension] = 'html'
+  if request[:path].match(/\./)
+    request[:file_extension] = request[:path].split('/').last.split('.')[1] 
+    request[:path] = request[:path].split(".#{request[:file_extension]}")[0]
+  end
+  # controller
+  request[:controller] = request[:path].split('/').reject{ |x| x.empty? }.first
+  # content_types
+  content_types = {
+    :html => 'text/html',
+    :json => 'application/json'
+  }
+  # setup response object
+  response = {
+    :status => 200,
+    :content_type => content_types[request[:file_extension].to_sym]
+  }
+  # handle request path
+  case request[:controller]
+  when /\//
+    response[:body] = "Hello World"
+  when /query/
+    response[:body] = request[:query]
+  when /debug/
+    response[:body] = JSON.generate(request)
+  else
+    response[:status] = 404
+    response[:body] = "Not Found"
+  end
+  return response
+end
 
-  # Wait until a client connects, then return a TCPSocket
-  # that can be used in a similar fashion to other Ruby
-  # I/O objects. (In fact, TCPSocket is a subclass of IO.)
-  socket = server.accept
+while socket = server.accept do 
 
-  # Read the first line of the request (the Request-Line)
-  request = socket.gets
+  # create request object
+  request = {
+    :start_time => Time.now.to_f
+  }
 
-  # Log the request to the console for debugging
-  STDERR.puts request
+  # parse request line variables into request object
+  request_line = socket.gets.split(" ") 
 
-  response_body = "Hello Vanessa!\n"
+  %w(method url protocol).each_with_index do |key, index|
+    request[key.to_sym] = request_line[index]
+  end
 
-  # We need to include the Content-Type and Content-Length headers
-  # to let the client know the size and type of data
-  # contained in the response. Note that HTTP is whitespace
-  # sensitive, and expects each header line to end with CRLF (i.e. "\r\n")
-  protocol = "HTTP/1.1"
-  status = "200 OK"
-  end_of_line = "\r\n"
-  content_type = "text/plain"
-  content_length = response_body.bytesize
+  # populate request object from socket
+  while line = socket.gets and line != "\r\n"
+    request[line.split(':')[0].downcase.gsub('-', '_').to_sym] = line.split(':')[1].chomp
+  end
 
-  response_headers =  ["#{protocol} #{status}", "Content-Type: #{content_type}", "Content-Length: #{content_length}", "Connection: close", ""].join(end_of_line)
+  # IP
+  request[:remote_address] = socket.addr.join(' ')
+  request[:remote_ip] = socket.addr.last
 
-  puts response_headers
+  # status codes
+  status_codes = [200, 404]
 
-  # Print a blank line to separate the header from the response body,
-  # as required by the protocol.
-  response = response_headers + "\r\n" + response_body
-  puts response
+  # status code messages
+  status_code_messages = {
+    200 => "OK",
+    404 => "Not Found"
+  }
+
+  # handle request
+  response = handle(request)
+
+  # response headers
+  response[:headers] =  [
+    "HTTP/1.1 #{response[:status]} #{status_code_messages[response[:status]]}",
+    "Content-Type: #{response[:content_type]}",
+    "Content-Length: #{response[:body].to_s.bytesize}",
+    "Connection: close", 
+    "X-Powered-By: Ruby", ""].join("\r\n")
+  response = response[:headers] + "\r\n" + response[:body].to_s
+
+  # print response and end connection
   socket.print response
-
-
-  # Close the socket, terminating the connection
   socket.close
+
+  # logging
+  puts "#{request[:url]} #{((Time.now.to_f - request[:start_time]) * 1000).round(2)}ms"
+
+  # delete request, response, and socket objects
+  request = nil
+  response = nil
+  socket = nil
+  GC.start
+
 end
