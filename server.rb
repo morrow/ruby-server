@@ -1,62 +1,8 @@
 require 'socket'
 require 'json'
+require './dispatch.rb'
 
 server = TCPServer.new('localhost', 8093)
-
-def handle(request)
-  # parse query string
-  if request[:url].match(/\?/)
-    request[:query] = {}
-    query_string = request[:url].split('?')[1]
-    request[:path] = request[:url].split('?')[0]
-    # key-value query string
-    if query_string and query_string.match(/\=/)
-      if query_string.match(/\&/)
-        query_string.split('&').each do |key_value|
-          key = key_value.split('=')[0]
-          value = key_value.split('=')[1]
-          request[:query][key] = value
-        end
-      else
-        request[:query][query_string.split('=')[0]] = query_string.split('=')[1]
-      end
-    # query only string
-    elsif query_string
-      request[:query] = {query_string => ""}
-    end
-  end
-  # file extension
-  request[:file_extension] = 'html'
-  if request[:path].match(/\./)
-    request[:file_extension] = request[:path].split('/').last.split('.')[1] 
-    request[:path] = request[:path].split(".#{request[:file_extension]}")[0]
-  end
-  # controller
-  request[:controller] = request[:path].split('/').reject{ |x| x.empty? }.first
-  # content_types
-  content_types = {
-    :html => 'text/html',
-    :json => 'application/json'
-  }
-  # setup response object
-  response = {
-    :status => 200,
-    :content_type => content_types[request[:file_extension].to_sym]
-  }
-  # handle request path
-  case request[:controller]
-  when /\//
-    response[:body] = "Hello World"
-  when /query/
-    response[:body] = request[:query]
-  when /debug/
-    response[:body] = JSON.generate(request)
-  else
-    response[:status] = 404
-    response[:body] = "Not Found"
-  end
-  return response
-end
 
 while socket = server.accept do 
 
@@ -66,7 +12,9 @@ while socket = server.accept do
   }
 
   # parse request line variables into request object
-  request_line = socket.gets.split(" ") 
+  request_line = socket.gets
+  next if not request_line
+  request_line = request_line.split(" ") 
 
   %w(method url protocol).each_with_index do |key, index|
     request[key.to_sym] = request_line[index]
@@ -90,8 +38,8 @@ while socket = server.accept do
     404 => "Not Found"
   }
 
-  # handle request
-  response = handle(request)
+  # dispatch request
+  response = dispatch(request)
 
   # response headers
   response[:headers] =  [
