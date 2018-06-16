@@ -1,10 +1,10 @@
 require 'json'
 require 'uri'
-require './handlers.rb'
+require './handlers'
 require './config/content_types.rb'
 
 def dispatch(request)
-  
+
   # parse URI
   uri = URI(request[:url])
   %w(scheme host port path query fragment).each do |key|
@@ -24,7 +24,8 @@ def dispatch(request)
   response = {
     :status => 200,
     :content_type => content_types[File.extname(request[:path]).delete('.').to_sym],
-    :title => request[:controller].gsub('/', ' ')
+    :title => request[:controller].gsub('/', ' '),
+    :body => '',
   }
 
   # default content type is html
@@ -34,16 +35,14 @@ def dispatch(request)
   case request[:controller]
   when 'index'
     indexHandler(request, response)
-  when 'about'
-    aboutHandler(request, response)
-  when 'contact'
-    contactHandler(request, response)
   when 'assets'
     assetHandler(request, response)
-  when 'work'
-    workHandler(request, response)
-  when 'services'
-    servicesHandler(request, response)
+  when 'about'
+    aboutHandler(request, response)
+  when 'projects'
+    projectHandler(request, response)
+  when 'contact'
+    contactHandler(request, response)
   else
     response[:status] = 404
     response[:body] = "Not Found"
@@ -51,6 +50,7 @@ def dispatch(request)
 
   # html response
   if response[:content_type] == 'text/html'
+    # hash to html view
     if response[:body].class == Hash
       obj = response[:body]
       response[:body] = ''
@@ -65,17 +65,17 @@ def dispatch(request)
       end
       if response[0..4] == '<ul>'
         response[:body] += '</ul>'
-      end 
+      end
     end
-    # page template
-    if File.exists?("templates/pages/#{request[:controller].to_s}.html")
-      response[:body] = File.open("templates/pages/#{request[:controller].to_s}.html", "r").read % response
+    # page view
+    if $VIEWS[request[:controller].to_s]
+      response[:body] = $VIEWS[request[:controller].to_s] % response
     end
-    # application template
-    response[:header] = File.open("templates/layout/header.html", "r").read % response
-    #response[:footer] = File.open("templates/layout/footer.html", "r").read % response
-    response[:body] = File.open("templates/layout/application.html", "r").read % response
-  
+    # application view
+    %w(header footer body).each do |component|
+      response[component.to_sym] = $VIEWS[component] % response
+    end
+
   # json response
   elsif response[:content_type] == 'application/json'
     if response[:body].is_a? String

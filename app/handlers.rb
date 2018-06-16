@@ -1,39 +1,29 @@
-require './datastore.rb'
+require './datastore'
 
-# assets
-def assetHandler(request, response)
-  file_path = "#{request[:path]}".gsub(/\.\.|^\//, '')
-  if File.exist?(file_path)
-    response[:body] = File.open(file_path, 'r').read
-  else
-    response[:status] = 404
-    response[:body] = "Not Found"
-  end
-end
-
-# index
-def indexHandler(request, response)
-  response[:body] = {"index" => "Hello World"}
-end
-
-# work
-def workHandler(request, response)
-  response[:body] = {:work => "test"}
-end
-
-# about
 def aboutHandler(request, response)
-  response[:body] = "about"
+  return response
 end
 
-#services
-def servicesHandler(request, response)
-  response[:body] = "services"
+def assetHandler(request, response)
+  return response
 end
 
-# contact
+def indexHandler(request, response)
+  response[:text] = 'test'
+  return response
+end
+
+def projectHandler(request, response)
+  return response
+end
+
 def contactHandler(request, response)
-  response[:body] = {}
-  %w(email phone skype).map { |field| response[:body][field.to_sym] = cms_get(field) }
-  puts response[:body]
+  ds = DataStore.new(:development, true)
+  response[:body] = {
+    :email => ds.cms_get('email'),
+    :skype => ds.cms_get('skype'),
+    :phone => ds.cms_get('phone'),
+  }
+  ds.close
+  return response
 end

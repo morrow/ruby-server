@@ -1,18 +1,33 @@
-$LOAD_PATH << File.dirname(__FILE__)
-
 require 'socket'
 require 'json'
-require './dispatch.rb'
+require './dispatch'
+
+# add current directoy to load path for requires
+$LOAD_PATH << File.dirname(__FILE__)
+# set root directory
+$ROOT_DIR = Dir.getwd
+# modify root directory if server launched inside of app folder
+if Dir.getwd.split('/').last.match /app/
+  $ROOT_DIR = Dir.getwd.split('/')[0..-2].join('/')
+end
+
+# load views into memory
+$VIEWS = {}
+view_dir = File.join($ROOT_DIR, 'app/views/*/*.html')
+Dir.glob(view_dir).each do |filename|
+  puts filename
+  $VIEWS[File.basename(filename, ".*")] = File.open(filename, 'r').read
+end
 
 # get port from arguments or set to default (8093)
 PORT = 8093
 PORT = ARGV.first if ARGV.length > 0 and ARGV.first.to_i >= 0 and ARGV.first.to_i <= 65535
 server = TCPServer.new('localhost', PORT)
-puts "starting server on #{PORT}"
+$stdout.puts "starting server on #{PORT}"
 
 # start socket loop
-while socket = server.accept do 
-  
+while socket = server.accept do
+
   # grab first line from request
   request_line = socket.gets
 
@@ -60,10 +75,10 @@ while socket = server.accept do
   status_codes = status_code_messages.keys
 
   begin
-  
+
     # dispatch request
     response = dispatch(request)
-  
+
   rescue => e
 
     # rescue from error
@@ -81,7 +96,7 @@ while socket = server.accept do
       "HTTP/1.1 #{response[:status]} #{status_code_messages[response[:status]]}",
       "Content-Type: #{response[:content_type]}",
       "Content-Length: #{response[:body].to_s.bytesize}",
-      "Connection: close", 
+      "Connection: close",
       "X-Powered-By: Ruby", ""].join("\r\n")
 
     # print response and body (if not a head request) and end connection
@@ -92,7 +107,7 @@ while socket = server.accept do
     # logging
     $stdout.puts "#{request[:method]} #{request[:url]} #{response[:status]} #{((Time.now.to_f - request[:start_time]) * 1000).round(2)}ms"
     $stderr.puts response[:error] if response[:error]
-    
+
     # delete request, response, and socket objects
     request = nil
     response = nil
